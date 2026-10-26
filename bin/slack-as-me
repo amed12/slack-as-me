@@ -1,0 +1,14 @@
+#!/usr/bin/env node
+'use strict';
+
+// Shim tipis: seluruh logika ada di ../lib/cli.js supaya bisa diuji dengan
+// dependency yang disuntik (lihat test/run.js).
+
+const { run } = require('../lib/cli.js');
+
+run({ argv: process.argv.slice(2), stdout: (t) => process.stdout.write(t), stderr: (t) => process.stderr.write(t) })
+  .then((r) => process.exit(r.code))
+  .catch((err) => {
+    process.stderr.write('slack-as-me: ' + ((err && err.stack) || String(err)) + '\n');
+    process.exit(1);
+  });

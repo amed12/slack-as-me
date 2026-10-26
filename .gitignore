@@ -1,0 +1,3 @@
+# Tidak ada kredensial di direktori ini (token hanya di Keychain), tapi jaga-jaga:
+*.token
+.env

@@ -1,0 +1,16 @@
+display_information:
+  name: slack-as-me CLI
+  description: Kirim pesan Slack sebagai diri sendiri dari terminal
+oauth_config:
+  scopes:
+    user:
+      - chat:write
+      - files:write
+      - channels:read
+      - groups:read
+      - users:read
+      - users:read.email
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
