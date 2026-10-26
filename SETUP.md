@@ -102,3 +102,36 @@ sehingga email tidak bisa diambil. `whoami` akan menampilkan handle + user ID sa
 Pakai **user ID** yang dicetak `whoami` untuk `--confirm-as` (mis. `U01DGERLBQU`).
 Handle (`fathullah`) juga cocok. Ini justru pengikat yang lebih kuat daripada email:
 user ID tidak berubah kalau email atau nama tampilan diganti.
+
+## Mode bot (`--as-bot`)
+
+Ditambahkan 2026-10-26 atas permintaan operator, disetujui TL: pesan agen boleh
+tampil sebagai **bot milik operator** (mis. `buz`), bukan sebagai akun pribadi.
+Pesan tampil dengan nama bot dan label `APP`; penanda `_sent by Claude Code (AI)_`
+tetap ditempel. Nama/avatar tetap tidak bisa diatur (allowlist `lib/slack.js`).
+
+1. Di app Slack milik bot, *OAuth & Permissions* -> **Bot Token Scopes**: `chat:write`.
+   Install/reinstall, salin **Bot User OAuth Token** (`xoxb-...`).
+2. Pemilik bot menyimpan token sendiri (tidak tampil, tidak masuk history):
+
+   ```bash
+   ./bin/slack-as-me login --bot buz
+   ```
+
+   Token disimpan di Keychain service `slack-as-me`, account `bot:buz`. Tidak
+   mengubah pengirim default; tanpa `--as-bot`, `send` tetap memakai user token.
+3. Undang bot ke channel tujuan: `/invite @buz`. Tanpa ini Slack menjawab
+   `not_in_channel` (exit 5, pesan error menyebut perintah undangnya).
+4. Periksa: `./bin/slack-as-me doctor --as-bot buz` lalu kirim:
+
+   ```bash
+   ./bin/slack-as-me send --as-bot buz --to <link> --file <draft> \
+       --confirm-as <user-id-bot-dari-doctor> --yes
+   ```
+
+`--confirm-as` untuk bot menerima user ID bot (`U...`), handle, atau `bot_id`
+(`B...`). Receipt draft, `--yes`, dan resolve channel berlaku sama. Kirim ke
+`#nama` butuh scope `channels:read`/`groups:read` di bot; pakai link atau
+channel ID kalau scope itu tidak ada.
+
+Cabut: `security delete-generic-password -s slack-as-me -a bot:buz`.

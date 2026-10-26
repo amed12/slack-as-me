@@ -24,6 +24,13 @@ Membuat pesan tampil sebagai orang lain padahal bukan dia yang menulis adalah
 pemalsuan authorship -- pembaca thread tidak punya cara membedakannya. Jadi
 kemampuan itu tidak disediakan, bukan cuma tidak dipakai.
 
+## Mode bot
+
+`--as-bot <nama>` (sejak 2026-10-26) mengirim lewat bot milik operator, mis. `buz`:
+pesan tampil sebagai bot itu (label `APP`), penanda AI tetap ada, dan keempat pengaman
+tetap berlaku. Harus diminta per perintah; tanpa flag itu `send` tetap memakai user token
+dan menolak bot token. Setup di `SETUP.md` bagian "Mode bot".
+
 ## Periksa dulu kalau ragu
 
 ```bash

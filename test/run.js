@@ -417,6 +417,122 @@ async function main() {
     assert.strictEqual(stub.writes().length, 0);
   });
 
+  // --------------------------------------------------------------- mode bot
+
+  const BOT_IDENTITY = { user_id: 'U0BUZ', user: 'buz', team: 'Qiscus', team_id: 'T0QISCUS', bot_id: 'B0BUZ' };
+  const BOT_SCOPES = 'chat:write';
+  const botReader = (seen) => (acct) => {
+    seen.push(acct);
+    return acct === 'bot:buz' ? 'xoxb-test-bot' : null;
+  };
+
+  await t('bot: --as-bot kirim lewat token bot, penanda AI tetap ada', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: BOT_SCOPES, usersInfoFails: true });
+    const seen = [];
+    const body = 'Lewat bot buz.';
+    await cli(['draft', '--to', 'C0ABCDEF', '--text', body, '--no-copy'], { tokenReader: TOKEN_OK });
+    const r = await cli(['send', '--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', body,
+                         '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader(seen) });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.deepStrictEqual(seen, ['bot:buz'], 'hanya token bot yang dibaca');
+    const post = stub.calls.find((c) => c.method === 'chat.postMessage');
+    assert.strictEqual(post.auth, 'Bearer xoxb-test-bot');
+    assert.ok(post.body.text.includes('_sent by Claude Code (AI)_'));
+    assert.ok(!('username' in post.body) && !('icon_emoji' in post.body), 'tidak ada penyamaran nama');
+    assert.ok(r.stdout.includes('BOT buz'));
+  });
+
+  await t('bot: --confirm-as bot_id juga diterima', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: BOT_SCOPES, usersInfoFails: true });
+    const body = 'Konfirmasi pakai bot_id.';
+    await cli(['draft', '--to', 'C0ABCDEF', '--text', body, '--no-copy'], { tokenReader: TOKEN_OK });
+    const r = await cli(['send', '--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', body,
+                         '--confirm-as', 'B0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+  });
+
+  await t('bot: --confirm-as user manusia ditolak saat --as-bot', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: BOT_SCOPES, usersInfoFails: true });
+    const body = 'Salah identitas bot.';
+    await cli(['draft', '--to', 'C0ABCDEF', '--text', body, '--no-copy'], { tokenReader: TOKEN_OK });
+    const r = await cli(['send', '--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', body,
+                         '--confirm-as', 'U0ACHMAD', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.IDENTITY, r.stderr);
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('bot: --as-bot dengan user token di slot bot ditolak', async () => {
+    const stub = makeStub();
+    const body = 'Slot bot berisi user token.';
+    await cli(['draft', '--to', 'C0ABCDEF', '--text', body, '--no-copy'], { tokenReader: TOKEN_OK });
+    const r = await cli(['send', '--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', body,
+                         '--confirm-as', 'U0ACHMAD', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: () => 'xoxp-x' });
+    assert.strictEqual(r.code, EXIT.IDENTITY, r.stderr);
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('bot: token bot belum ada -> exit 6, tidak memakai user token', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY });
+    const seen = [];
+    const r = await cli(['send', '--as-bot', 'lain', '--to', 'C0ABCDEF', '--text', 'x',
+                         '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader(seen) });
+    assert.strictEqual(r.code, EXIT.TOKEN, r.stderr);
+    assert.deepStrictEqual(seen, ['bot:lain']);
+    assert.ok(/login --bot lain/.test(r.stderr));
+  });
+
+  await t('bot: tanpa receipt draft tetap ditolak', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: BOT_SCOPES, usersInfoFails: true });
+    const r = await cli(['send', '--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'Belum pernah di-draft bot.',
+                         '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.RECEIPT, r.stderr);
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('bot: nama bot tidak valid ditolak', async () => {
+    const r = await cli(['send', '--as-bot', 'Buz Bot', '--to', 'C0ABCDEF', '--text', 'x', '--confirm-as', 'U0BUZ'],
+                        { tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.USAGE, r.stderr);
+  });
+
+  await t('bot: not_in_channel diberi petunjuk /invite', async () => {
+    const base = makeStub({ identity: BOT_IDENTITY, scopes: BOT_SCOPES, usersInfoFails: true });
+    const fetchImpl = async (url, init) => {
+      if (String(url).endsWith('/chat.postMessage')) {
+        return { ok: true, status: 200, headers: { get: () => null },
+                 json: async () => ({ ok: false, error: 'not_in_channel' }) };
+      }
+      return base.fetchImpl(url, init);
+    };
+    const body = 'Bot belum diundang.';
+    await cli(['draft', '--to', 'C0ABCDEF', '--text', body, '--no-copy'], { tokenReader: TOKEN_OK });
+    const r = await cli(['send', '--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', body,
+                         '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.API, r.stderr);
+    assert.ok(/\/invite @buz/.test(r.stderr));
+  });
+
+  await t('bot: send tanpa --as-bot tidak pernah membaca token bot', async () => {
+    const stub = makeStub();
+    const seen = [];
+    const body = 'Jalur user biasa.';
+    await cli(['draft', '--to', 'C0ABCDEF', '--text', body, '--no-copy'], { tokenReader: TOKEN_OK });
+    const r = await cli(['send', '--to', 'C0ABCDEF', '--text', body, '--confirm-as', ACCOUNT, '--yes'], {
+      fetchImpl: stub.fetchImpl,
+      tokenReader: (a) => { seen.push(a); return 'xoxp-test-token'; },
+    });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.ok(seen.every((a) => !a.startsWith('bot:')));
+  });
+
+  await t('bot: doctor --as-bot hanya menuntut chat:write', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: BOT_SCOPES, usersInfoFails: true });
+    const r = await cli(['doctor', '--as-bot', 'buz'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.OK, r.stdout + r.stderr);
+    assert.ok(r.stdout.includes('token bertipe bot'));
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
   await t('send: #nama ambigu ditolak', async () => {
     const stub = makeStub({
       channels: [
