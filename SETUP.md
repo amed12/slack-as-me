@@ -107,8 +107,10 @@ user ID tidak berubah kalau email atau nama tampilan diganti.
 
 Ditambahkan 2026-10-26 atas permintaan operator, disetujui TL: pesan agen boleh
 tampil sebagai **bot milik operator** (mis. `buz`), bukan sebagai akun pribadi.
-Pesan tampil dengan nama bot dan label `APP`; penanda `_sent by Claude Code (AI)_`
-tetap ditempel. Nama/avatar tetap tidak bisa diatur (allowlist `lib/slack.js`).
+Pesan tampil dengan nama bot dan label `APP`. Penanda `_sent by Claude Code (AI)_`
+**tidak** ditempel lewat bot (label APP sudah menandai pesan bukan ketikan manusia;
+keputusan TL via operator, 2026-10-26). `draft` juga harus memakai `--as-bot <nama>`
+supaya receipt cocok. Nama/avatar tetap tidak bisa diatur (allowlist `lib/slack.js`).
 
 1. Di app Slack milik bot, *OAuth & Permissions* -> **Bot Token Scopes**: `chat:write`.
    Install/reinstall, salin **Bot User OAuth Token** (`xoxb-...`).
@@ -125,7 +127,8 @@ tetap ditempel. Nama/avatar tetap tidak bisa diatur (allowlist `lib/slack.js`).
 4. Periksa: `./bin/slack-as-me doctor --as-bot buz` lalu kirim:
 
    ```bash
-   ./bin/slack-as-me send --as-bot buz --to <link> --file <draft> \
+   ./bin/slack-as-me draft --as-bot buz --to <link> --file <draft>
+   ./bin/slack-as-me send  --as-bot buz --to <link> --file <draft> \
        --confirm-as <user-id-bot-dari-doctor> --yes
    ```
 

@@ -27,8 +27,8 @@ kemampuan itu tidak disediakan, bukan cuma tidak dipakai.
 ## Mode bot
 
 `--as-bot <nama>` (sejak 2026-10-26) mengirim lewat bot milik operator, mis. `buz`:
-pesan tampil sebagai bot itu (label `APP`), penanda AI tetap ada, dan keempat pengaman
-tetap berlaku. Harus diminta per perintah; tanpa flag itu `send` tetap memakai user token
+pesan tampil sebagai bot itu (label `APP`), tanpa penanda AI (label APP sudah
+menandainya; `draft` juga pakai `--as-bot`), dan keempat pengaman tetap berlaku. Harus diminta per perintah; tanpa flag itu `send` tetap memakai user token
 dan menolak bot token. Setup di `SETUP.md` bagian "Mode bot".
 
 ## Periksa dulu kalau ragu
