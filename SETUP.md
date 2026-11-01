@@ -11,7 +11,7 @@ mode `send`/`schedule`.
 ## 1. Buat Slack app
 
 1. Buka <https://api.slack.com/apps> -> **Create New App** -> **From scratch**.
-2. Nama bebas (mis. `slack-as-me CLI`), pilih workspace Qiscus.
+2. Nama bebas (mis. `slack-as-me CLI`), pilih workspace Slack Anda.
 
 ## 2. Minta User Token Scopes
 
@@ -27,9 +27,8 @@ Di halaman **OAuth & Permissions**, gulir ke *Scopes*. Isi bagian
 | `users:read.email` | mencocokkan `--confirm-as <email>` **kalau** workspace mengizinkan; di Qiscus Tech tidak, jadi pakai user ID |
 | `files:write` | lampiran lewat `--attach` (opsional; tanpa scope ini hanya `--attach` yang ditolak, exit 6) |
 
-Kalau Anda mengisi *Bot Token Scopes*, yang keluar adalah token `xoxb-` dan
-CLI ini akan menolaknya: pesan dari bot token tampil sebagai bot, jadi tidak
-menyelesaikan masalah identitas yang jadi alasan tool ini dibuat.
+Untuk pengiriman sebagai user, gunakan User Token Scopes dan token `xoxp-`.
+Token bot `xoxb-` dipakai hanya dalam mode bot eksplisit di bawah.
 
 ### Menambah `files:write` ke app yang sudah terpasang
 
@@ -49,7 +48,7 @@ tunggu admin menyetujui.
 ## 4. Simpan token di mesin ini
 
 ```bash
-cd /Users/asani/kantor-ai/slack-as-me
+cd /path/ke/slack-as-me
 ./bin/slack-as-me login --account <email-slack-anda>
 ```
 
