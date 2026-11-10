@@ -91,6 +91,11 @@ Perintah pertama adalah dry-run; perintah kedua mendaftarkan pesan terjadwal di 
 
 Pesan tampil sebagai bot dengan label APP. Tanpa `--as-bot`, pengiriman menggunakan user token dan menolak bot token. Untuk akun pribadi, pemilihan account mengikuti `--account`, lalu `SLACK_AS_ME_ACCOUNT`, lalu default di konfigurasi. Gunakan `doctor` untuk melihat nilai `--confirm-as` yang diterima; email mungkin tidak tersedia di workspace tertentu, sehingga user ID adalah pilihan praktis.
 
+## Membaca thread
+
+Untuk membaca balasan dalam sebuah thread secara read-only (keluaran JSON `[{"user","ts","text"}]`):
+`./bin/slack-as-me read-thread --channel <C|G|D...> --ts <ts> [--as-bot nama-bot] [--json]`
+
 ## Pengaman dan pemecahan masalah
 
 Sebelum `send` atau `schedule` menulis ke Slack, identitas yang diberikan pada `--confirm-as` harus cocok dengan token, tujuan harus ter-resolve, dan receipt draft harus cocok serta belum lebih dari 60 menit. Tanpa `--yes`, perintah hanya melakukan dry-run setelah pemeriksaan tersebut. Tool menolak field pengubah identitas seperti `username`, `icon_url`, `icon_emoji`, dan `as_user`, serta `blocks` dan `attachments` pada payload pesan.

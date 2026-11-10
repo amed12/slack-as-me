@@ -111,7 +111,7 @@ Pesan tampil dengan nama bot dan label `APP`. Penanda `_sent by Claude Code (AI)
 keputusan TL via operator, 2026-10-26). `draft` juga harus memakai `--as-bot <nama>`
 supaya receipt cocok. Nama/avatar tetap tidak bisa diatur (allowlist `lib/slack.js`).
 
-1. Di app Slack milik bot, *OAuth & Permissions* -> **Bot Token Scopes**: `chat:write`.
+1. Di app Slack milik bot, *OAuth & Permissions* -> **Bot Token Scopes**: `chat:write` (tambah `im:history` bila bot membaca thread DM via `read-thread`).
    Install/reinstall, salin **Bot User OAuth Token** (`xoxb-...`).
 2. Pemilik bot menyimpan token sendiri (tidak tampil, tidak masuk history):
 
@@ -129,6 +129,7 @@ supaya receipt cocok. Nama/avatar tetap tidak bisa diatur (allowlist `lib/slack.
    ./bin/slack-as-me draft --as-bot buz --to <link> --file <draft>
    ./bin/slack-as-me send  --as-bot buz --to <link> --file <draft> \
        --confirm-as <user-id-bot-dari-doctor> --yes
+   ./bin/slack-as-me read-thread --as-bot buz --channel D0123 --ts 1784788621.208259 --json
    ```
 
 `--confirm-as` untuk bot menerima user ID bot (`U...`), handle, atau `bot_id`

@@ -55,7 +55,7 @@ const IDENTITY = {
 
 function makeStub({ identity = IDENTITY, email = 'achmad@qiscus.com', channels = [],
                     scopes = 'identify,chat:write,channels:read,groups:read,users:read,users:read.email',
-                    usersInfoFails = false } = {}) {
+                    usersInfoFails = false, replies = null, repliesFails = false } = {}) {
   const calls = [];
   const fetchImpl = async (url, init) => {
     if (String(url).startsWith('https://files.slack.test/')) {
@@ -70,7 +70,7 @@ function makeStub({ identity = IDENTITY, email = 'achmad@qiscus.com', channels =
     calls.push({ method, body, auth: init.headers.Authorization });
     const hdrs = { get: (k) => (String(k).toLowerCase() === 'x-oauth-scopes' ? scopes : null) };
     const reply = (o) => ({ ok: true, status: 200, headers: hdrs, json: async () => ({ ok: true, ...o }) });
-    const fail = (e) => ({ ok: true, status: 200, headers: hdrs, json: async () => ({ ok: false, error: e }) });
+    const fail = (e, extra = {}) => ({ ok: true, status: 200, headers: hdrs, json: async () => ({ ok: false, error: e, ...extra }) });
     switch (method) {
       case 'auth.test':
         return reply(identity);
@@ -79,6 +79,18 @@ function makeStub({ identity = IDENTITY, email = 'achmad@qiscus.com', channels =
         return reply({ user: { real_name: 'Achmad Fathullah', name: identity.user, profile: { email } } });
       case 'conversations.list':
         return reply({ channels, response_metadata: { next_cursor: '' } });
+      case 'conversations.replies':
+        if (typeof repliesFails === 'string') return fail(repliesFails, { needed: 'channels:history,groups:history,im:history' });
+        if (repliesFails) return fail('missing_scope', { needed: 'channels:history,groups:history,im:history' });
+        if (typeof replies === 'function') return replies(body, { reply, fail });
+        if (Array.isArray(replies)) return reply({ messages: replies, response_metadata: { next_cursor: '' } });
+        return reply({
+          messages: [
+            { type: 'message', user: 'U0ACHMAD', text: 'Pesan induk thread', ts: body.ts || '1784788621.208259' },
+            { type: 'message', user: 'U0BUZ', text: 'Balasan bot', ts: '1784788625.000200', blocks: [] },
+          ],
+          response_metadata: { next_cursor: '' },
+        });
       case 'chat.postMessage':
         return reply({ ts: '1784788999.000100', channel: body.channel });
       case 'chat.scheduleMessage':
@@ -543,6 +555,24 @@ async function main() {
     assert.strictEqual(stub.writes().length, 0);
   });
 
+  await t('bot: doctor --as-bot beri WARN bila im:history belum ada (bukan gagal)', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: 'chat:write', usersInfoFails: true });
+    const r = await cli(['doctor', '--as-bot', 'buz'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.ok(r.stdout.includes('WARN   scope im:history'));
+    assert.ok(r.stdout.includes('belum ada'));
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('bot: doctor --as-bot tampilkan OK bila im:history ada', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: 'chat:write,im:history', usersInfoFails: true });
+    const r = await cli(['doctor', '--as-bot', 'buz'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.ok(r.stdout.includes('OK     scope im:history'));
+    assert.ok(r.stdout.includes('ada'));
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
   await t('send: #nama ambigu ditolak', async () => {
     const stub = makeStub({
       channels: [
@@ -808,6 +838,162 @@ async function main() {
     assert.strictEqual(r.code, EXIT.OK, r.stderr);
     assert.ok(r.stdout.includes('lampiran           : brief.pdf'));
     assert.strictEqual(stub.writes().length, 0);
+  });
+
+  // ------------------------------------------------------------- read-thread
+
+  await t('read-thread: sukses keluaran JSON [{"user","ts","text"}] dan read-only', async () => {
+    const stub = makeStub();
+    const r = await cli(
+      ['read-thread', '--channel', 'C0ABCDEF', '--ts', '1784788621.208259'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK }
+    );
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.strictEqual(stub.writes().length, 0);
+    const data = JSON.parse(r.stdout);
+    assert.strictEqual(Array.isArray(data), true);
+    assert.strictEqual(data.length, 2);
+    // Pastikan field lain dibuang (hanya user, ts, text)
+    assert.deepStrictEqual(data[0], {
+      user: 'U0ACHMAD',
+      ts: '1784788621.208259',
+      text: 'Pesan induk thread',
+    });
+    assert.deepStrictEqual(data[1], {
+      user: 'U0BUZ',
+      ts: '1784788625.000200',
+      text: 'Balasan bot',
+    });
+    assert.deepStrictEqual(Object.keys(data[1]).sort(), ['text', 'ts', 'user']);
+  });
+
+  await t('read-thread: sukses dengan --as-bot dan flag --json', async () => {
+    const seen = [];
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: 'chat:write,im:history' });
+    const r = await cli(
+      ['read-thread', '--as-bot', 'buz', '--channel', 'D0ABCDEF', '--ts', '1784788621.208259', '--json'],
+      { fetchImpl: stub.fetchImpl, tokenReader: botReader(seen) }
+    );
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.strictEqual(seen.includes('bot:buz'), true);
+    assert.strictEqual(stub.writes().length, 0);
+    const data = JSON.parse(r.stdout);
+    assert.strictEqual(data.length, 2);
+  });
+
+  await t('read-thread: mengikuti paginasi next_cursor', async () => {
+    let callCount = 0;
+    const stub = makeStub({
+      replies: (body, { reply }) => {
+        callCount++;
+        if (!body.cursor) {
+          return reply({
+            messages: [{ user: 'U1', ts: '1784788621.000001', text: 'Hal 1' }],
+            response_metadata: { next_cursor: 'cur_page_2' },
+          });
+        }
+        if (body.cursor === 'cur_page_2') {
+          return reply({
+            messages: [{ user: 'U2', ts: '1784788621.000002', text: 'Hal 2' }],
+            response_metadata: { next_cursor: '' },
+          });
+        }
+        return reply({ messages: [], response_metadata: { next_cursor: '' } });
+      },
+    });
+
+    const r = await cli(
+      ['read-thread', '--channel', 'C0ABCDEF', '--ts', '1784788621.208259'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK }
+    );
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.strictEqual(callCount, 2);
+    const data = JSON.parse(r.stdout);
+    assert.strictEqual(data.length, 2);
+    assert.strictEqual(data[0].text, 'Hal 1');
+    assert.strictEqual(data[1].text, 'Hal 2');
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('read-thread: validasi channel (kosong/salah) -> exit 2', async () => {
+    const stub = makeStub();
+    // Tanpa --channel
+    const r1 = await cli(
+      ['read-thread', '--ts', '1784788621.208259'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK }
+    );
+    assert.strictEqual(r1.code, EXIT.INPUT, r1.stderr);
+    assert.ok(r1.stderr.includes('--channel'));
+
+    // Channel bukan diawali C/G/D
+    const r2 = await cli(
+      ['read-thread', '--channel', 'X0123', '--ts', '1784788621.208259'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK }
+    );
+    assert.strictEqual(r2.code, EXIT.INPUT, r2.stderr);
+    assert.ok(r2.stderr.includes('--channel'));
+
+    // Channel nama (#general) ditolak untuk read-thread
+    const r3 = await cli(
+      ['read-thread', '--channel', '#general', '--ts', '1784788621.208259'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK }
+    );
+    assert.strictEqual(r3.code, EXIT.INPUT, r3.stderr);
+    assert.ok(r3.stderr.includes('--channel'));
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('read-thread: validasi ts (kosong/salah) -> exit 2', async () => {
+    const stub = makeStub();
+    // Tanpa --ts
+    const r1 = await cli(
+      ['read-thread', '--channel', 'C0ABCDEF'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK }
+    );
+    assert.strictEqual(r1.code, EXIT.INPUT, r1.stderr);
+    assert.ok(r1.stderr.includes('--ts'));
+
+    // ts bukan angka/timestamp
+    const r2 = await cli(
+      ['read-thread', '--channel', 'C0ABCDEF', '--ts', 'invalid-ts'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK }
+    );
+    assert.strictEqual(r2.code, EXIT.INPUT, r2.stderr);
+    assert.ok(r2.stderr.includes('--ts'));
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('read-thread: scope kurang -> exit 6 dan menyebut scope yang dibutuhkan', async () => {
+    const stub = makeStub({
+      repliesFails: 'missing_scope',
+    });
+    const r = await cli(
+      ['read-thread', '--channel', 'C0ABCDEF', '--ts', '1784788621.208259'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK }
+    );
+    assert.strictEqual(r.code, EXIT.TOKEN, r.stderr);
+    assert.ok(r.stderr.includes('channels:history'));
+    assert.ok(r.stderr.includes('groups:history'));
+    assert.ok(r.stderr.includes('im:history'));
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('read-thread: token tidak pernah muncul di output atau error', async () => {
+    const SECRET_TOKEN = 'xoxp-rahasia-jangan-bocor-12345';
+    const stub = makeStub({
+      replies: (body, { fail }) => {
+        // Slack menyisipkan token di pesan error (skenario bocor)
+        return fail('token_rejected_with_' + SECRET_TOKEN);
+      },
+    });
+    const r = await cli(
+      ['read-thread', '--channel', 'C0ABCDEF', '--ts', '1784788621.208259'],
+      { fetchImpl: stub.fetchImpl, tokenReader: () => SECRET_TOKEN }
+    );
+    assert.notStrictEqual(r.code, EXIT.OK);
+    assert.strictEqual(r.stdout.includes(SECRET_TOKEN), false, 'token tidak boleh ada di stdout');
+    assert.strictEqual(r.stderr.includes(SECRET_TOKEN), false, 'token tidak boleh ada di stderr');
+    assert.ok(r.stderr.includes('<redacted-token>'), 'token harus di-scrub');
   });
 
   // ------------------------------------------------------------------ report
