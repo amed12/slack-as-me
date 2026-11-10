@@ -80,6 +80,8 @@ function makeStub({ identity = IDENTITY, email = 'achmad@qiscus.com', channels =
       case 'conversations.list':
         return reply({ channels, response_metadata: { next_cursor: '' } });
       case 'conversations.replies':
+        // Slack sungguhan: method ini tidak membaca body JSON (invalid_arguments, 2026-11-10).
+        if (!ctype.startsWith('application/x-www-form-urlencoded')) return fail('invalid_arguments');
         if (typeof repliesFails === 'string') return fail(repliesFails, { needed: 'channels:history,groups:history,im:history' });
         if (repliesFails) return fail('missing_scope', { needed: 'channels:history,groups:history,im:history' });
         if (typeof replies === 'function') return replies(body, { reply, fail });
