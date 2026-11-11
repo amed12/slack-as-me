@@ -917,6 +917,23 @@ async function main() {
     assert.strictEqual(stub.writes().length, 0);
   });
 
+  await t('read-thread: oldest diteruskan pada setiap halaman', async () => {
+    const seen = [];
+    const stub = makeStub({ replies: (body, { reply }) => {
+      seen.push(body);
+      return reply({ messages: [], response_metadata: { next_cursor: seen.length === 1 ? 'next' : '' } });
+    }});
+    const r = await cli(
+      ['read-thread', '--channel', 'C0ABCDEF', '--ts', '1784788621.208259', '--oldest', '1784788622.000001'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK }
+    );
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.strictEqual(seen.length, 2);
+    assert.strictEqual(seen[0].oldest, '1784788622.000001');
+    assert.strictEqual(seen[1].oldest, '1784788622.000001');
+    assert.strictEqual(seen[1].cursor, 'next');
+  });
+
   await t('read-thread: validasi channel (kosong/salah) -> exit 2', async () => {
     const stub = makeStub();
     // Tanpa --channel
