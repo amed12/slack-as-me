@@ -446,7 +446,7 @@ async function main() {
     const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
     const args = ['--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'Approval test'];
     await cli(['draft', ...args, '--no-copy']);
-    const r = await cli(['send', ...args, '--yes', '--approval-buttons', '012345abcdef'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    const r = await cli(['send', ...args, '--confirm-as', 'U0BUZ', '--yes', '--approval-buttons', '012345abcdef'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
     assert.strictEqual(r.code, EXIT.OK, r.stderr);
     const post = stub.calls.find(c => c.method === 'chat.postMessage');
     assert.strictEqual(post.body.text, 'Approval test');
@@ -473,10 +473,10 @@ async function main() {
     const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
     const args = ['--as-bot', 'buz', '--to', 'C0ABCDEF', '--thread', '1784788621.208259', '--text', 'Ephemeral test'];
     const deps = { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) };
-    const before = await cli(['send-ephemeral', ...args, '--user', 'U123ABC'], deps);
+    const before = await cli(['send-ephemeral', ...args, '--user', 'U123ABC', '--confirm-as', 'U0BUZ', '--yes'], deps);
     assert.strictEqual(before.code, EXIT.RECEIPT, before.stderr);
     await cli(['draft', ...args, '--no-copy']);
-    const after = await cli(['send-ephemeral', ...args, '--user', 'U123ABC'], deps);
+    const after = await cli(['send-ephemeral', ...args, '--user', 'U123ABC', '--confirm-as', 'U0BUZ', '--yes'], deps);
     assert.strictEqual(after.code, EXIT.OK, after.stderr);
     const posts = stub.calls.filter(c => c.method === 'chat.postEphemeral');
     assert.strictEqual(posts.length, 1);
