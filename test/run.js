@@ -95,6 +95,8 @@ function makeStub({ identity = IDENTITY, email = 'achmad@qiscus.com', channels =
         });
       case 'chat.postMessage':
         return reply({ ts: '1784788999.000100', channel: body.channel });
+      case 'chat.postEphemeral':
+        return reply({ message_ts: '1784788999.000100' });
       case 'chat.scheduleMessage':
         return reply({ scheduled_message_id: 'Q123' });
       case 'files.getUploadURLExternal':
@@ -439,6 +441,58 @@ async function main() {
     seen.push(acct);
     return acct === 'bot:buz' ? 'xoxb-test-bot' : null;
   };
+
+  await t('bot: approval buttons menghasilkan blocks tetap dan ts', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    const args = ['--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'Approval test'];
+    await cli(['draft', ...args, '--no-copy']);
+    const r = await cli(['send', ...args, '--yes', '--approval-buttons', '012345abcdef'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    const post = stub.calls.find(c => c.method === 'chat.postMessage');
+    assert.strictEqual(post.body.text, 'Approval test');
+    assert.deepStrictEqual(post.body.blocks, [
+      { type: 'section', text: { type: 'mrkdwn', text: 'Approval test' } },
+      { type: 'actions', elements: [
+        { type: 'button', text: { type: 'plain_text', text: 'Kirim' }, action_id: 'guz_send', style: 'primary', value: '012345abcdef' },
+        { type: 'button', text: { type: 'plain_text', text: 'Tolak' }, action_id: 'guz_reject', value: '012345abcdef' },
+      ] },
+    ]);
+    assert.match(r.stdout, /^ts\s*:\s*1784788999\.000100/m);
+  });
+
+  await t('approval buttons menolak ID invalid dan mode pribadi tanpa menulis', async () => {
+    for (const args of [ ['--as-bot', 'buz', '--approval-buttons', 'INVALID'], ['--approval-buttons', '012345abcdef'] ]) {
+      const stub = makeStub({ identity: BOT_IDENTITY });
+      const r = await cli(['send', '--to', 'C0ABCDEF', '--text', 'test', '--yes', ...args], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+      assert.notStrictEqual(r.code, EXIT.OK);
+      assert.strictEqual(stub.writes().length, 0);
+    }
+  });
+
+  await t('bot: ephemeral membutuhkan receipt dan mengirim ke user pada thread', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    const args = ['--as-bot', 'buz', '--to', 'C0ABCDEF', '--thread', '1784788621.208259', '--text', 'Ephemeral test'];
+    const deps = { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) };
+    const before = await cli(['send-ephemeral', ...args, '--user', 'U123ABC'], deps);
+    assert.strictEqual(before.code, EXIT.RECEIPT, before.stderr);
+    await cli(['draft', ...args, '--no-copy']);
+    const after = await cli(['send-ephemeral', ...args, '--user', 'U123ABC'], deps);
+    assert.strictEqual(after.code, EXIT.OK, after.stderr);
+    const posts = stub.calls.filter(c => c.method === 'chat.postEphemeral');
+    assert.strictEqual(posts.length, 1);
+    assert.strictEqual(posts[0].body.user, 'U123ABC');
+    assert.strictEqual(posts[0].body.thread_ts, '1784788621.208259');
+    assert.strictEqual(posts[0].body.text, 'Ephemeral test');
+  });
+
+  await t('ephemeral menolak mode pribadi, user invalid, dan target tanpa thread', async () => {
+    for (const args of [ ['--user', 'U123ABC'], ['--as-bot', 'buz', '--user', 'invalid'], ['--as-bot', 'buz', '--user', 'U123ABC'] ]) {
+      const stub = makeStub({ identity: BOT_IDENTITY });
+      const r = await cli(['send-ephemeral', '--to', 'C0ABCDEF', '--text', 'test', ...args], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+      assert.notStrictEqual(r.code, EXIT.OK);
+      assert.strictEqual(stub.writes().length, 0);
+    }
+  });
 
   await t('bot: --as-bot kirim lewat token bot, tanpa penanda AI', async () => {
     const stub = makeStub({ identity: BOT_IDENTITY, scopes: BOT_SCOPES, usersInfoFails: true });

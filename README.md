@@ -91,6 +91,8 @@ Perintah pertama adalah dry-run; perintah kedua mendaftarkan pesan terjadwal di 
 
 Pesan tampil sebagai bot dengan label APP. Tanpa `--as-bot`, pengiriman menggunakan user token dan menolak bot token. Untuk akun pribadi, pemilihan account mengikuti `--account`, lalu `SLACK_AS_ME_ACCOUNT`, lalu default di konfigurasi. Gunakan `doctor` untuk melihat nilai `--confirm-as` yang diterima; email mungkin tidak tersedia di workspace tertentu, sehingga user ID adalah pilihan praktis.
 
+Untuk bot, `send` juga menerima `--approval-buttons <draft_id>` (tepat 12 karakter hex kecil) untuk menambahkan tombol Kirim/Tolak. `--confirm-as` opsional pada `send` bot; jika diberikan tetap diverifikasi. Untuk status yang hanya terlihat oleh satu user dalam thread, jalankan `draft` bot terlebih dahulu dengan isi dan tujuan yang sama, lalu `send-ephemeral --as-bot nama-bot --to <link-thread> --user <user-id> --file pesan.md`. Perintah ephemeral langsung mengirim setelah pemeriksaan receipt dan identitas bot.
+
 ## Membaca thread
 
 Untuk membaca balasan dalam sebuah thread secara read-only (keluaran JSON `[{"user","ts","text"}]`):
@@ -98,7 +100,7 @@ Untuk membaca balasan dalam sebuah thread secara read-only (keluaran JSON `[{"us
 
 ## Pengaman dan pemecahan masalah
 
-Sebelum `send` atau `schedule` menulis ke Slack, identitas yang diberikan pada `--confirm-as` harus cocok dengan token, tujuan harus ter-resolve, dan receipt draft harus cocok serta belum lebih dari 60 menit. Tanpa `--yes`, perintah hanya melakukan dry-run setelah pemeriksaan tersebut. Tool menolak field pengubah identitas seperti `username`, `icon_url`, `icon_emoji`, dan `as_user`, serta `blocks` dan `attachments` pada payload pesan.
+Sebelum pengiriman, identitas yang diberikan pada `--confirm-as` harus cocok dengan token, tujuan harus ter-resolve, dan receipt draft harus cocok serta belum lebih dari 60 menit. `send` dan `schedule` tanpa `--yes` hanya melakukan dry-run. Tool menolak field pengubah identitas seperti `username`, `icon_url`, `icon_emoji`, dan `as_user`, serta `blocks` dan `attachments` dari luar; blok tombol dibuat internal untuk `send` bot saja.
 
 | Exit | Arti | Langkah berikutnya |
 |---|---|---|
