@@ -923,6 +923,32 @@ async function main() {
     assert.deepStrictEqual(Object.keys(data[1]).sort(), ['text', 'ts', 'user']);
   });
 
+  await t('read-thread: isi blocks/attachments pesan bot ikut ke text', async () => {
+    const stub = makeStub({ replies: [
+      { type: 'message', bot_id: 'B0COSMIC', text: 'Judul investigasi', ts: '1784788621.208259',
+        blocks: [
+          { type: 'header', text: { type: 'plain_text', text: 'Judul investigasi' } },
+          { type: 'section', text: { type: 'mrkdwn', text: '*Temuan* server normal' },
+            fields: [{ type: 'mrkdwn', text: 'Scope: prod' }] },
+          { type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text: 'butir rich' }] }] },
+          { type: 'context', elements: [{ type: 'mrkdwn', text: 'Dipicu oleh X' }] },
+        ],
+        attachments: [{ fallback: 'fb', text: 'lampiran isi' }] },
+      { type: 'message', user: 'U0ACHMAD', text: 'biasa', ts: '1784788625.000200' },
+    ] });
+    const r = await cli(['read-thread', '--channel', 'C0ABCDEF', '--ts', '1784788621.208259'],
+      { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    const data = JSON.parse(r.stdout);
+    assert.strictEqual(data[0].user, 'B0COSMIC');
+    for (const part of ['Judul investigasi', '*Temuan* server normal', 'Scope: prod', 'butir rich', 'Dipicu oleh X', 'lampiran isi']) {
+      assert.ok(data[0].text.includes(part), part);
+    }
+    assert.strictEqual(data[0].text.split('Judul investigasi').length - 1, 1, 'judul tidak diulang');
+    assert.deepStrictEqual(data[1], { user: 'U0ACHMAD', ts: '1784788625.000200', text: 'biasa' });
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
   await t('read-thread: sukses dengan --as-bot dan flag --json', async () => {
     const seen = [];
     const stub = makeStub({ identity: BOT_IDENTITY, scopes: 'chat:write,im:history' });
