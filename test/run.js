@@ -923,6 +923,18 @@ async function main() {
     assert.deepStrictEqual(Object.keys(data[1]).sort(), ['text', 'ts', 'user']);
   });
 
+  await t('read-thread: edited provenance preserved without exposing extra fields', async () => {
+    const stub = makeStub({ replies: [
+      { user:'U_EDITOR',ts:'1784788621.208259',text:'Edited question',edited:{user:'U_OWNER',ts:'1784788622.000001',private:'not-returned'} },
+      { user:'U_EDITOR',ts:'1784788623.000001',text:'No edit metadata' },
+    ] });
+    const r=await cli(['read-thread','--channel','C0ABCDEF','--ts','1784788621.208259'],{fetchImpl:stub.fetchImpl,tokenReader:TOKEN_OK});
+    const data=JSON.parse(r.stdout);
+    assert.deepStrictEqual(data[0].edited,{user:'U_OWNER',ts:'1784788622.000001'});
+    assert.ok(!Object.hasOwn(data[1],'edited'));
+    assert.strictEqual(stub.writes().length,0);
+  });
+
   await t('read-thread: isi blocks/attachments pesan bot ikut ke text', async () => {
     const stub = makeStub({ replies: [
       { type: 'message', bot_id: 'B0COSMIC', text: 'Judul investigasi', ts: '1784788621.208259',
