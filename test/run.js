@@ -961,6 +961,79 @@ async function main() {
     assert.strictEqual(stub.writes().length, 0);
   });
 
+  await t('read-history: bounded DM pages preserve message metadata', async () => {
+    const calls = [];
+    const messages = [
+      { ts: '100.1', user: 'U1', text: ' first ', thread_ts: '99.1', edited: { user: 'U1', ts: '100.2' } },
+      { ts: '101.1', user: 'U2', text: 'second' },
+    ];
+    const fetchImpl = async (url, init) => {
+      const body = Object.fromEntries(new URLSearchParams(init.body));
+      calls.push({ url, body });
+      return { headers: { get: () => null }, json: async () => ({
+        ok: true, messages: [messages[calls.length - 1]],
+        has_more: calls.length === 1,
+        response_metadata: { next_cursor: calls.length === 1 ? 'next' : '' },
+      }) };
+    };
+    const r = await cli(['read-history', '--channel', 'D123', '--oldest', '99.0', '--latest', '102.0', '--json'],
+      { fetchImpl, tokenReader: TOKEN_OK });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.deepStrictEqual(JSON.parse(r.stdout), messages);
+    assert.deepStrictEqual(calls.map(c => c.body), [
+      { channel: 'D123', oldest: '99.0', latest: '102.0', limit: '100' },
+      { channel: 'D123', oldest: '99.0', latest: '102.0', limit: '100', cursor: 'next' },
+    ]);
+    assert.ok(calls.every(c => c.url.endsWith('/conversations.history')));
+  });
+
+  await t('read-history: rejects invalid bounds and non-DM before network', async () => {
+    for (const args of [
+      ['C123', '1.0', '2.0'], ['D123', 'bad', '2.0'], ['D123', '3.0', '2.0'],
+    ]) {
+      const stub = makeStub();
+      const r = await cli(['read-history', '--channel', args[0], '--oldest', args[1], '--latest', args[2], '--json'],
+        { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK });
+      assert.notStrictEqual(r.code, EXIT.OK);
+      assert.strictEqual(stub.calls.length, 0);
+    }
+  });
+
+  await t('read-history: incomplete, malformed and looping pages fail closed', async () => {
+    for (const page of [
+      { messages: [], has_more: true, response_metadata: { next_cursor: '' } },
+      { messages: 'bad', has_more: false },
+      { messages: [{ ts: '1.0', user: 'U1' }], has_more: false },
+      { messages: [], has_more: true, response_metadata: { next_cursor: 'same' } },
+      { messages: [], has_more: false, response_metadata: { next_cursor: 1 } },
+    ]) {
+      let calls = 0;
+      const fetchImpl = async () => {
+        calls++;
+        return { headers: { get: () => null }, json: async () => ({ ok: true, ...page }) };
+      };
+      const r = await cli(['read-history', '--channel', 'D123', '--oldest', '1.0', '--latest', '2.0', '--json'],
+        { fetchImpl, tokenReader: TOKEN_OK });
+      assert.notStrictEqual(r.code, EXIT.OK);
+      assert.strictEqual(r.stdout, '');
+      assert.ok(calls <= 5);
+    }
+  });
+
+  await t('read-history: fails if five pages still have a cursor', async () => {
+    let calls = 0;
+    const fetchImpl = async () => ({
+      headers: { get: () => null },
+      json: async () => ({ ok: true, messages: [], has_more: true,
+        response_metadata: { next_cursor: String(++calls) } }),
+    });
+    const r = await cli(['read-history', '--channel', 'D123', '--oldest', '1.0', '--latest', '2.0', '--json'],
+      { fetchImpl, tokenReader: TOKEN_OK });
+    assert.notStrictEqual(r.code, EXIT.OK);
+    assert.strictEqual(r.stdout, '');
+    assert.strictEqual(calls, 5);
+  });
+
   await t('read-thread: sukses dengan --as-bot dan flag --json', async () => {
     const seen = [];
     const stub = makeStub({ identity: BOT_IDENTITY, scopes: 'chat:write,im:history' });
