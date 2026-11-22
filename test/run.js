@@ -1014,6 +1014,16 @@ async function main() {
     }
   });
 
+  await t('read-history: bot posts reported under bot_id, unattributed entries dropped', async () => {
+    const fetchImpl = async () => ({ headers: { get: () => null }, json: async () => ({ ok: true,
+      messages: [{ ts: '1.1', bot_id: 'B9', text: 'alert' }, { ts: '1.2', subtype: 'tombstone' },
+        { ts: '1.3', user: 'U1', text: 'hi' }], has_more: false }) });
+    const r = await cli(['read-history', '--channel', 'C123', '--oldest', '1.0', '--latest', '2.0', '--json'],
+      { fetchImpl, tokenReader: TOKEN_OK });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.deepStrictEqual(JSON.parse(r.stdout).map((m) => m.user), ['B9', 'U1']);
+  });
+
   await t('read-history: rejects invalid bounds and channel IDs before network', async () => {
     for (const args of [
       ['X123', '1.0', '2.0'], ['C123', 'bad', '2.0'], ['G123', '3.0', '2.0'],
