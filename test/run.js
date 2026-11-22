@@ -987,9 +987,36 @@ async function main() {
     assert.ok(calls.every(c => c.url.endsWith('/conversations.history')));
   });
 
-  await t('read-history: rejects invalid bounds and non-DM before network', async () => {
+  await t('read-history: channels work with user and bot tokens and preserve reply metadata', async () => {
+    for (const channel of ['C123', 'G123']) {
+      for (const asBot of [false, true]) {
+        const seen = [];
+        const calls = [];
+        const fetchImpl = async (url, init) => {
+          calls.push({ url, body: Object.fromEntries(new URLSearchParams(init.body)) });
+          return { headers: { get: () => null }, json: async () => ({ ok: true,
+            messages: [{ ts: '1.1', user: 'U1', text: 'hello', thread_ts: '1.1', reply_count: 0, latest_reply: '1.2' },
+              { ts: '1.3', user: 'U2', text: 'other' }], has_more: false }) };
+        };
+        const r = await cli(['read-history', '--channel', channel, '--oldest', '1.0', '--latest', '2.0',
+          ...(asBot ? ['--as-bot', 'buz'] : []), '--json'],
+          { fetchImpl, tokenReader: asBot ? botReader(seen) : TOKEN_OK });
+        assert.strictEqual(r.code, EXIT.OK, r.stderr);
+        assert.deepStrictEqual(JSON.parse(r.stdout), [
+          { ts: '1.1', user: 'U1', text: 'hello', thread_ts: '1.1', reply_count: 0, latest_reply: '1.2' },
+          { ts: '1.3', user: 'U2', text: 'other' },
+        ]);
+        assert.strictEqual(calls.length, 1);
+        assert.ok(calls[0].url.endsWith('/conversations.history'));
+        assert.deepStrictEqual(calls[0].body, { channel, oldest: '1.0', latest: '2.0', limit: '100' });
+        if (asBot) assert.deepStrictEqual(seen, ['bot:buz']);
+      }
+    }
+  });
+
+  await t('read-history: rejects invalid bounds and channel IDs before network', async () => {
     for (const args of [
-      ['C123', '1.0', '2.0'], ['D123', 'bad', '2.0'], ['D123', '3.0', '2.0'],
+      ['X123', '1.0', '2.0'], ['C123', 'bad', '2.0'], ['G123', '3.0', '2.0'],
     ]) {
       const stub = makeStub();
       const r = await cli(['read-history', '--channel', args[0], '--oldest', args[1], '--latest', args[2], '--json'],
