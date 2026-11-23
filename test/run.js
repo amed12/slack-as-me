@@ -450,6 +450,8 @@ async function main() {
     assert.strictEqual(r.code, EXIT.OK, r.stderr);
     const post = stub.calls.find(c => c.method === 'chat.postMessage');
     assert.strictEqual(post.body.text, 'Approval test');
+    assert.strictEqual(post.body.unfurl_links, false);
+    assert.strictEqual(post.body.unfurl_media, false);
     assert.deepStrictEqual(post.body.blocks, [
       { type: 'section', text: { type: 'mrkdwn', text: 'Approval test' } },
       { type: 'actions', elements: [
