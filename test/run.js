@@ -925,6 +925,47 @@ async function main() {
     assert.deepStrictEqual(Object.keys(data[1]).sort(), ['text', 'ts', 'user']);
   });
 
+  await t('download-files: pagination, safe names, size, cache and redirect safety', async () => {
+    const dir = fs.mkdtempSync(path.join(TMP_HOME, 'downloads-'));
+    const token = 'xoxp-test-token';
+    const calls = [];
+    const file = (name, size, url, extra = {}) => ({ name, size, mimetype: 'text/plain', url_private_download: url, ...extra });
+    const fetchImpl = async (url, init) => {
+      calls.push({ url: String(url), init });
+      if (String(url).endsWith('/conversations.replies')) {
+        const cursor = new URLSearchParams(init.body).get('cursor');
+        const messages = cursor ? [{ ts: '2.1', user: 'U2', files: [file('two.txt', 3, 'https://files.slack.com/two'), file('huge', 400000000, 'https://files.slack.com/huge'), file('external', 1, '', { mode: 'external' }), file('redirect', 1, 'https://files.slack.com/redirect')] }] : [{ ts: '1.1', user: 'U1', files: [file('../one.txt', 3, 'https://files.slack.com/one')] }];
+        return { headers: { get: () => 'files:read' }, json: async () => ({ ok: true, messages, response_metadata: { next_cursor: cursor ? '' : 'next' } }) };
+      }
+      if (String(url).endsWith('/redirect')) return { status: 302, headers: { get: () => 'https://evil.example/steal' } };
+      return { ok: true, status: 200, arrayBuffer: async () => Buffer.from('abc') };
+    };
+    const args = ['download-files', '--channel', 'C123', '--ts', '1.1', '--out', dir, '--json'];
+    let r = await cli(args, { fetchImpl, tokenReader: TOKEN_OK });
+    assert.strictEqual(r.code, 0, r.stderr);
+    let rows = JSON.parse(r.stdout);
+    assert.deepStrictEqual(rows.map(x => x.status), ['downloaded', 'downloaded', 'skipped-size', 'skipped-external', 'error:redirect']);
+    assert.ok(!path.basename(rows[0].path).includes('..'));
+    assert.strictEqual(fs.readFileSync(rows[0].path, 'utf8'), 'abc');
+    assert.strictEqual(fs.statSync(rows[0].path).mode & 0o777, 0o600);
+    assert.strictEqual(fs.statSync(dir).mode & 0o777, 0o700);
+    assert.ok(!calls.some(c => c.url.includes('evil.example')));
+    assert.ok(!r.stdout.includes(token) && !r.stdout.includes('https://'));
+    r = await cli(args, { fetchImpl, tokenReader: TOKEN_OK });
+    rows = JSON.parse(r.stdout);
+    assert.deepStrictEqual(rows.slice(0, 2).map(x => x.status), ['cached', 'cached']);
+  });
+
+  await t('download-files: missing files:read stops after first page', async () => {
+    let calls = 0;
+    const fetchImpl = async () => { calls++; return { headers: { get: () => 'channels:history' }, json: async () => ({ ok: true, messages: [], response_metadata: { next_cursor: 'next' } }) }; };
+    const r = await cli(['download-files', '--channel', 'C123', '--ts', '1.1', '--out', TMP_HOME, '--as-bot', 'buz'], { fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, 6);
+    assert.match(r.stderr, /files:read/);
+    assert.match(r.stderr, /Bot Token Scopes/);
+    assert.strictEqual(calls, 1);
+  });
+
   await t('read-thread: edited provenance preserved without exposing extra fields', async () => {
     const stub = makeStub({ replies: [
       { user:'U_EDITOR',ts:'1784788621.208259',text:'Edited question',edited:{user:'U_OWNER',ts:'1784788622.000001',private:'not-returned'} },

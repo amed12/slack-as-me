@@ -5,6 +5,7 @@ oauth_config:
   scopes:
     user:
       - chat:write
+      - files:read
       - files:write
       - channels:read
       - groups:read
