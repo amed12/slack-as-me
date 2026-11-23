@@ -922,6 +922,39 @@ async function main() {
     assert.strictEqual(stub.writes().length, 0);
   });
 
+  await t('usergroup-members: user dan bot menghasilkan array ID tanpa token', async () => {
+    for (const bot of [false, true]) {
+      const calls = [];
+      const fetchImpl = async (url, init) => {
+        calls.push({ method: String(url).split('/api/')[1], body: Object.fromEntries(new URLSearchParams(init.body)), auth: init.headers.Authorization });
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ ok: true, users: ['U123', 'U456'] }) };
+      };
+      const r = await cli(['usergroup-members', '--id', 'S123456', ...(bot ? ['--as-bot', 'buz'] : []), '--json'],
+        { fetchImpl, tokenReader: bot ? botReader([]) : TOKEN_OK });
+      assert.strictEqual(r.code, EXIT.OK, r.stderr);
+      assert.deepStrictEqual(JSON.parse(r.stdout), ['U123', 'U456']);
+      assert.strictEqual(calls[0].method, 'usergroups.users.list');
+      assert.strictEqual(calls[0].body.usergroup, 'S123456');
+      assert.ok(!r.stdout.includes(calls[0].auth.slice(7)) && !r.stderr.includes(calls[0].auth.slice(7)));
+    }
+  });
+
+  await t('usergroup-members: ID tidak valid ditolak sebelum membaca token', async () => {
+    for (const id of ['', 'S12345', 's123456', 'S12345!', 'U123456']) {
+      const r = await cli(['usergroup-members', '--id', id, '--json'], { tokenReader: TOKEN_NONE });
+      assert.strictEqual(r.code, EXIT.INPUT);
+    }
+  });
+
+  await t('usergroup-members: missing_scope memberi petunjuk dan exit 6 tanpa token', async () => {
+    const fetchImpl = async () => ({ ok: true, status: 200, headers: { get: () => null },
+      json: async () => ({ ok: false, error: 'missing_scope' }) });
+    const r = await cli(['usergroup-members', '--id', 'S123456', '--json'], { fetchImpl, tokenReader: TOKEN_OK });
+    assert.strictEqual(r.code, EXIT.TOKEN);
+    assert.ok(r.stderr.includes('usergroups:read'));
+    assert.ok(!(r.stdout + r.stderr).includes(TOKEN_OK()));
+  });
+
   // ------------------------------------------------------------- read-thread
 
   await t('read-thread: sukses keluaran JSON [{"user","ts","text"}] dan read-only', async () => {
