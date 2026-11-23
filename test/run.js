@@ -496,6 +496,30 @@ async function main() {
     }
   });
 
+  await t('react: add/remove, idempotensi, validasi dan scope bot', async () => {
+    const base = ['react', '--channel', 'C123', '--ts', '1.1', '--name', 'thumbsup', '--as-bot', 'buz'];
+    for (const [extra, error, method] of [[[], null, 'reactions.add'], [['--remove'], null, 'reactions.remove'], [[], 'already_reacted', 'reactions.add'], [['--remove'], 'no_reaction', 'reactions.remove']]) {
+      const calls = [];
+      const fetchImpl = async (url, init) => {
+        calls.push({ method: String(url).split('/api/')[1], body: JSON.parse(init.body), auth: init.headers.Authorization });
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => error ? { ok: false, error } : { ok: true } };
+      };
+      const seen = [];
+      const r = await cli([...base, ...extra], { fetchImpl, tokenReader: botReader(seen) });
+      assert.strictEqual(r.code, 0, r.stderr);
+      assert.strictEqual(r.stdout, 'ok\n');
+      assert.deepStrictEqual(calls.map(c => [c.method, c.body]), [[method, { channel: 'C123', timestamp: '1.1', name: 'thumbsup' }]]);
+      assert.deepStrictEqual(seen, ['bot:buz']);
+    }
+    for (const args of [base.slice(0, -2), [...base.slice(0, 6), ':bad:', ...base.slice(7)]]) {
+      const r = await cli(args, { tokenReader: () => { throw new Error('should not read token'); } });
+      assert.strictEqual(r.code, 2, r.stderr);
+    }
+    const r = await cli(base, { tokenReader: botReader([]), fetchImpl: async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ ok: false, error: 'missing_scope' }) }) });
+    assert.strictEqual(r.code, 6);
+    assert.match(r.stderr, /reactions:write/);
+  });
+
   await t('bot: --as-bot kirim lewat token bot, tanpa penanda AI', async () => {
     const stub = makeStub({ identity: BOT_IDENTITY, scopes: BOT_SCOPES, usersInfoFails: true });
     const seen = [];
