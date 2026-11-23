@@ -907,6 +907,43 @@ async function main() {
   const THREAD = 'https://qiscus.slack.com/archives/D0ABCDEF/p1784788621208259';
   const ATT_MSG = 'Mas, ini revisinya ya, PDF terlampir.';
 
+  await t('attach: dua file bot ke thread DM memakai satu complete dan receipt', async () => {
+    const second = path.join(TMP_HOME, 'gambar.png');
+    fs.writeFileSync(second, 'gambar');
+    const args = ['--as-bot', 'buz', '--to', THREAD, '--text', 'Dua file', '--attach', ATTACH, '--attach', second];
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: 'chat:write,files:write', usersInfoFails: true });
+    const draft = await cli(['draft', ...args, '--no-copy']);
+    assert.strictEqual(draft.code, EXIT.OK, draft.stderr);
+    const r = await cli(['send', ...args, '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    const done = stub.calls.filter(c => c.method === 'files.completeUploadExternal');
+    assert.strictEqual(done.length, 1);
+    assert.strictEqual(JSON.parse(done[0].body.files).length, 2);
+    assert.strictEqual(done[0].body.channel_id, 'D0ABCDEF');
+    assert.strictEqual(done[0].body.thread_ts, '1784788621.208259');
+    assert.strictEqual(done[0].body.initial_comment, 'Dua file');
+    fs.writeFileSync(second, 'berubah');
+    const changed = await cli(['send', ...args, '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(changed.code, EXIT.RECEIPT);
+  });
+
+  await t('attach: tolak tipe, ukuran, dan jumlah lampiran', async () => {
+    const bad = path.join(TMP_HOME, 'bad.exe'); fs.writeFileSync(bad, 'x');
+    const big = path.join(TMP_HOME, 'big.txt'); fs.writeFileSync(big, Buffer.alloc(10 * 1024 * 1024 + 1));
+    for (const attachments of [['--attach', bad], ['--attach', big], ...[Array(7).fill(['--attach', ATTACH]).flat()]]) {
+      const r = await cli(['draft', '--to', THREAD, '--text', 'x', ...attachments, '--no-copy']);
+      assert.strictEqual(r.code, EXIT.INPUT, r.stderr);
+    }
+  });
+
+  await t('attach: scope bot hilang menjelaskan Bot Token Scopes', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, scopes: 'chat:write', usersInfoFails: true });
+    const r = await cli(['send', '--as-bot', 'buz', '--to', THREAD, '--text', 'x', '--attach', ATTACH, '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.TOKEN, r.stderr);
+    assert.match(r.stderr, /Bot Token Scopes/);
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
   await t('receipt: tanpa lampiran, key sama dengan format lama', () => {
     const crypto = require('crypto');
     const old = crypto.createHash('sha256').update(JSON.stringify(['x', '1.2']), 'utf8').digest('hex');

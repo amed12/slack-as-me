@@ -61,14 +61,14 @@ Pesan dari akun pribadi secara default ditutup dengan `_sent by Claude Code (AI)
 
 ## Lampiran dan jadwal
 
-Untuk mengirim satu file bersama komentar, sertakan `--attach` pada draft **dan** send:
+Untuk mengirim hingga enam file bersama komentar, sertakan setiap `--attach` pada draft **dan** send:
 
 ```bash
 ./bin/slack-as-me draft --to C123 --file pesan.md --attach laporan.pdf
 ./bin/slack-as-me send --to C123 --file pesan.md --attach laporan.pdf --confirm-as U123 --yes
 ```
 
-Token membutuhkan scope `files:write`. Receipt mengikat hash isi lampiran; jika file berubah, draft ulang. Lampiran tidak didukung oleh `schedule`.
+Token membutuhkan scope `files:write` (Bot Token Scopes untuk mode bot). Setiap file maksimal 10 MiB; tipe yang didukung: png, jpg, jpeg, gif, mp4, mov, pdf, txt, dan log. Receipt mengikat isi semua lampiran; jika file berubah, draft ulang. Lampiran tidak didukung oleh `schedule`.
 
 Untuk menjadwalkan pesan teks, buat draft seperti biasa, lalu gunakan waktu ISO 8601 di masa depan. Sertakan zona waktu agar jelas:
 
