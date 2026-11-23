@@ -102,6 +102,10 @@ Untuk membaca balasan dalam sebuah thread secara read-only (keluaran JSON `[{"us
 
 `./bin/slack-as-me usergroup-members --id <S...> [--as-bot nama-bot] --json` mengembalikan array JSON berisi user ID. Perintah ini membutuhkan scope `usergroups:read` pada token user (default) atau token bot yang dipilih.
 
+## Memperbarui pesan bot
+
+`./bin/slack-as-me update --channel <C|G|D...> --ts <ts> --file <f> --as-bot <nama> [--yes]` memperbarui teks pesan milik bot dan menghapus tombolnya. Tanpa `--yes` perintah hanya melakukan dry-run; update tidak memerlukan receipt draft.
+
 ## Pengaman dan pemecahan masalah
 
 Sebelum pengiriman, identitas yang diberikan pada `--confirm-as` harus cocok dengan token, tujuan harus ter-resolve, dan receipt draft harus cocok serta belum lebih dari 60 menit. `send` dan `schedule` tanpa `--yes` hanya melakukan dry-run. Tool menolak field pengubah identitas seperti `username`, `icon_url`, `icon_emoji`, dan `as_user`, serta `blocks` dan `attachments` dari luar; blok tombol dibuat internal untuk `send` bot saja.

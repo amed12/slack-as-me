@@ -20,7 +20,7 @@ delete process.env.SLACK_AS_ME_ACCOUNT;
 const assert = require('assert');
 const { parseTarget, normalizeTs, TargetError } = require('../lib/target');
 const { toMrkdwn } = require('../lib/mrkdwn');
-const { buildMessagePayload, IDENTITY_OVERRIDE } = require('../lib/slack');
+const { SlackClient, buildMessagePayload, IDENTITY_OVERRIDE } = require('../lib/slack');
 const receipt = require('../lib/receipt');
 const { run, EXIT } = require('../lib/cli');
 
@@ -93,6 +93,8 @@ function makeStub({ identity = IDENTITY, email = 'achmad@qiscus.com', channels =
           ],
           response_metadata: { next_cursor: '' },
         });
+      case 'chat.update':
+        return reply({ ts: body.ts, channel: body.channel });
       case 'chat.postMessage':
         return reply({ ts: '1784788999.000100', channel: body.channel });
       case 'chat.postEphemeral':
@@ -441,6 +443,48 @@ async function main() {
     seen.push(acct);
     return acct === 'bot:buz' ? 'xoxb-test-bot' : null;
   };
+
+  await t('update: bot mengirim text normal dan blocks kosong', async () => {
+    const file = path.join(TMP_HOME, 'update.txt');
+    fs.writeFileSync(file, 'Status **selesai**');
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    const r = await cli(['update', '--channel', 'C123', '--ts', '123.456', '--file', file, '--as-bot', 'buz', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    const writes = stub.calls.filter(c => c.method === 'chat.update');
+    assert.strictEqual(writes.length, 1);
+    assert.deepStrictEqual(writes[0].body, { channel: 'C123', text: 'Status *selesai*', ts: '123.456', blocks: [] });
+  });
+
+  await t('update: hanya bot dan dry-run tanpa tulis', async () => {
+    const file = path.join(TMP_HOME, 'update-dry.txt');
+    fs.writeFileSync(file, 'Status');
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    const args = ['update', '--channel', 'C123', '--ts', '123.456', '--file', file];
+    const missing = await cli([...args, '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK });
+    assert.strictEqual(missing.code, EXIT.INPUT);
+    const dry = await cli([...args, '--as-bot', 'buz'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(dry.code, EXIT.OK, dry.stderr);
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('update: cant_update_message menjelaskan batas kepemilikan bot', async () => {
+    const file = path.join(TMP_HOME, 'update-error.txt');
+    fs.writeFileSync(file, 'Status');
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    const fetchImpl = async (url, init) => String(url).endsWith('/chat.update')
+      ? { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ ok: false, error: 'cant_update_message' }) }
+      : stub.fetchImpl(url, init);
+    const r = await cli(['update', '--channel', 'C123', '--ts', '123.456', '--file', file, '--as-bot', 'buz', '--yes'], { fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.API);
+    assert.match(r.stderr, /milik bot/i);
+  });
+
+  await t('update: blocks non-kosong ditolak sebelum panggilan API', async () => {
+    let called = false;
+    const client = new SlackClient('xoxb-test-bot', { fetchImpl: async () => { called = true; } });
+    assert.throws(() => client.updateMessage({ channel: 'C123', ts: '123.456', text: 'Status', blocks: [{}] }), /blocks/);
+    assert.strictEqual(called, false);
+  });
 
   await t('bot: approval buttons menghasilkan blocks tetap dan ts', async () => {
     const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
