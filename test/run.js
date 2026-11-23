@@ -444,6 +444,45 @@ async function main() {
     return acct === 'bot:buz' ? 'xoxb-test-bot' : null;
   };
 
+  await t('link-button: satu atau dua tombol tampil pada blocks yang dibentuk internal', async () => {
+    for (const buttons of [['Satu=https://example.com/a'], ['Satu=https://example.com/a', 'Dua=http://example.org/?a=b']]) {
+      const args = ['--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'Tautan', ...buttons.flatMap(b => ['--link-button', b])];
+      assert.strictEqual((await cli(['draft', ...args, '--no-copy'])).code, EXIT.OK);
+      const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+      const r = await cli(['send', ...args, '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+      assert.strictEqual(r.code, EXIT.OK, r.stderr);
+      const blocks = stub.calls.find(c => c.method === 'chat.postMessage').body.blocks;
+      assert.deepStrictEqual(blocks[0], { type: 'section', text: { type: 'mrkdwn', text: 'Tautan' } });
+      assert.deepStrictEqual(blocks[1], { type: 'actions', elements: buttons.map((b, i) => {
+        const at = b.indexOf('='); return { type: 'button', text: { type: 'plain_text', text: b.slice(0, at) }, url: b.slice(at + 1), action_id: 'guz_link_' + (i + 1) };
+      }) });
+    }
+  });
+
+  await t('link-button: tolak input invalid, akun pribadi dan kombinasi tidak didukung', async () => {
+    for (const extra of [ ['--link-button', '=https://example.com'], ['--link-button', 'x'.repeat(31) + '=https://example.com'], ['--link-button', 'x=javascript:alert(1)'], ['--link-button', 'x=https://'], ['--link-button', 'x=https://example.com', '--attach', 'x.pdf'], ['--link-button', 'x=https://example.com', '--approval-buttons', '012345abcdef'], Array(4).fill(['--link-button', 'x=https://example.com']).flat() ]) {
+      const r = await cli(['draft', '--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'x', ...extra, '--no-copy']);
+      assert.strictEqual(r.code, EXIT.INPUT, r.stderr);
+    }
+    const r = await cli(['draft', '--to', 'C0ABCDEF', '--text', 'x', '--link-button', 'x=https://example.com', '--no-copy']);
+    assert.strictEqual(r.code, EXIT.INPUT);
+  });
+
+  await t('link-button: builder menolak blocks atau bentuk tombol asing', () => {
+    const client = new SlackClient('xoxb-test-bot', { fetchImpl: () => { throw new Error('unexpected network'); } });
+    assert.throws(() => client.postMessage({ channel: 'C123', text: 'x', blocks: [{}] }, null, [{ label: 'x', url: 'https://example.com' }]), /blocks/);
+    assert.throws(() => client.postMessage({ channel: 'C123', text: 'x' }, null, [{ label: 'x', url: 'https://example.com', action_id: 'evil' }]), /link-button/);
+  });
+
+  await t('link-button: receipt berbeda menolak send', async () => {
+    const args = ['--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'Receipt link'];
+    await cli(['draft', ...args, '--link-button', 'A=https://example.com', '--no-copy']);
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    const r = await cli(['send', ...args, '--link-button', 'B=https://example.com', '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.RECEIPT);
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
   await t('update: bot mengirim text normal dan blocks kosong', async () => {
     const file = path.join(TMP_HOME, 'update.txt');
     fs.writeFileSync(file, 'Status **selesai**');

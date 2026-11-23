@@ -93,6 +93,8 @@ Pesan tampil sebagai bot dengan label APP. Tanpa `--as-bot`, pengiriman mengguna
 
 Untuk bot, `send` juga menerima `--approval-buttons <draft_id>` (tepat 12 karakter hex kecil) untuk menambahkan tombol Kirim/Tolak. `--confirm-as` opsional pada `send` bot; jika diberikan tetap diverifikasi. Untuk status yang hanya terlihat oleh satu user dalam thread, jalankan `draft` bot terlebih dahulu dengan isi dan tujuan yang sama, lalu `send-ephemeral --as-bot nama-bot --to <link-thread> --user <user-id> --file pesan.md`. Perintah ephemeral langsung mengirim setelah pemeriksaan receipt dan identitas bot.
 
+Untuk pesan bot, tambahkan hingga tiga tombol URL dengan `--link-button "Label=https://example.com"` pada **draft dan send**. Label maksimal 30 karakter; URL harus HTTP atau HTTPS. Tombol URL tidak dapat digabung dengan `--attach` atau `--approval-buttons` dan ikut diverifikasi dalam receipt.
+
 ## Membaca thread
 
 Untuk membaca balasan dalam sebuah thread secara read-only (keluaran JSON `[{"user","ts","text"}]`):
