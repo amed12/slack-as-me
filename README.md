@@ -95,6 +95,8 @@ Untuk bot, `send` juga menerima `--approval-buttons <draft_id>` (tepat 12 karakt
 
 Untuk pesan bot, tambahkan hingga tiga tombol URL dengan `--link-button "Label=https://example.com"` pada **draft dan send**. Label maksimal 30 karakter; URL harus HTTP atau HTTPS. Tombol URL tidak dapat digabung dengan `--attach` atau `--approval-buttons` dan ikut diverifikasi dalam receipt.
 
+Untuk menambahkan tombol **Tarik** pada pesan bot, pakai `--retract-button <id>` pada draft dan send dengan ID 12 karakter hex kecil yang sama. Opsi ini tidak dapat digabung dengan lampiran, tombol approval, atau tombol URL.
+
 ## Membaca thread
 
 Untuk membaca balasan dalam sebuah thread secara read-only (keluaran JSON `[{"user","ts","text"}]`):

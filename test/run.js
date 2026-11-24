@@ -446,6 +446,39 @@ async function main() {
     return acct === 'bot:buz' ? 'xoxb-test-bot' : null;
   };
 
+  await t('retract-button: bot mengirim blok Tarik sesuai receipt', async () => {
+    const args = ['--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'Status tarik', '--retract-button', '012345abcdef'];
+    const draft = await cli(['draft', ...args, '--no-copy']);
+    assert.strictEqual(draft.code, EXIT.OK, draft.stderr);
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    const r = await cli(['send', ...args, '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    assert.deepStrictEqual(stub.calls.find(c => c.method === 'chat.postMessage').body.blocks, [
+      { type: 'section', text: { type: 'mrkdwn', text: 'Status tarik' } },
+      { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Tarik' }, action_id: 'guz_retract', value: '012345abcdef', style: 'danger' }] },
+    ]);
+  });
+
+  await t('retract-button: validasi ID, bot, dan opsi yang bertentangan', async () => {
+    const base = ['draft', '--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'x', '--no-copy'];
+    for (const extra of [['--retract-button', '123'], ['--retract-button', '012345ABCDEf'], ['--retract-button'], ['--retract-button', '012345abcdef', '--attach', 'x.png'], ['--retract-button', '012345abcdef', '--approval-buttons', '012345abcdef'], ['--retract-button', '012345abcdef', '--link-button', 'x=https://example.com']]) {
+      const r = await cli([...base, ...extra]); assert.strictEqual(r.code, EXIT.INPUT, r.stderr);
+    }
+    const r = await cli(['draft', '--to', 'C0ABCDEF', '--text', 'x', '--retract-button', '012345abcdef', '--no-copy']);
+    assert.strictEqual(r.code, EXIT.INPUT);
+  });
+
+  await t('retract-button: receipt berbeda menolak pengiriman', async () => {
+    const args = ['--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'Receipt retract'];
+    await cli(['draft', ...args, '--retract-button', '012345abcdef', '--no-copy']);
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    for (const extra of [[], ['--retract-button', 'abcdef012345']]) {
+      const r = await cli(['send', ...args, ...extra, '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+      assert.strictEqual(r.code, EXIT.RECEIPT);
+    }
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
   await t('link-button: satu atau dua tombol tampil pada blocks yang dibentuk internal', async () => {
     for (const buttons of [['Satu=https://example.com/a'], ['Satu=https://example.com/a', 'Dua=http://example.org/?a=b']]) {
       const args = ['--as-bot', 'buz', '--to', 'C0ABCDEF', '--text', 'Tautan', ...buttons.flatMap(b => ['--link-button', b])];
