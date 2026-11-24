@@ -108,6 +108,10 @@ Untuk membaca balasan dalam sebuah thread secara read-only (keluaran JSON `[{"us
 
 `./bin/slack-as-me update --channel <C|G|D...> --ts <ts> --file <f> --as-bot <nama> [--yes]` memperbarui teks pesan milik bot dan menghapus tombolnya. Tanpa `--yes` perintah hanya melakukan dry-run; update tidak memerlukan receipt draft.
 
+## Menghapus pesan bot
+
+`./bin/slack-as-me delete --channel <C|G|D...> --ts <ts> --as-bot <nama> [--yes]` menghapus pesan milik bot sendiri. Tanpa `--yes`, perintah hanya melakukan dry-run.
+
 ## Pengaman dan pemecahan masalah
 
 Sebelum pengiriman, identitas yang diberikan pada `--confirm-as` harus cocok dengan token, tujuan harus ter-resolve, dan receipt draft harus cocok serta belum lebih dari 60 menit. `send` dan `schedule` tanpa `--yes` hanya melakukan dry-run. Tool menolak field pengubah identitas seperti `username`, `icon_url`, `icon_emoji`, dan `as_user`, serta `blocks` dan `attachments` dari luar; blok tombol dibuat internal untuk `send` bot saja.

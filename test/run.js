@@ -93,6 +93,8 @@ function makeStub({ identity = IDENTITY, email = 'achmad@qiscus.com', channels =
           ],
           response_metadata: { next_cursor: '' },
         });
+      case 'chat.delete':
+        return reply({ ts: body.ts, channel: body.channel });
       case 'chat.update':
         return reply({ ts: body.ts, channel: body.channel });
       case 'chat.postMessage':
@@ -480,6 +482,46 @@ async function main() {
     const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
     const r = await cli(['send', ...args, '--link-button', 'B=https://example.com', '--confirm-as', 'U0BUZ', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
     assert.strictEqual(r.code, EXIT.RECEIPT);
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('delete: bot menghapus pesan dengan channel dan ts', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    const r = await cli(['delete', '--channel', 'C123', '--ts', '123.456', '--as-bot', 'buz', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.OK, r.stderr);
+    const writes = stub.calls.filter(c => c.method === 'chat.delete');
+    assert.strictEqual(writes.length, 1);
+    assert.deepStrictEqual(writes[0].body, { channel: 'C123', ts: '123.456' });
+    assert.strictEqual(writes[0].auth, 'Bearer xoxb-test-bot');
+  });
+
+  await t('delete: tanpa bot ditolak dan dry-run tidak menulis', async () => {
+    const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+    const args = ['delete', '--channel', 'D123', '--ts', '123.456'];
+    const missing = await cli([...args, '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: TOKEN_OK });
+    assert.strictEqual(missing.code, EXIT.INPUT);
+    const dry = await cli([...args, '--as-bot', 'buz'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(dry.code, EXIT.OK, dry.stderr);
+    assert.match(dry.stdout, /dry.run/i);
+    assert.strictEqual(stub.writes().length, 0);
+  });
+
+  await t('delete: kesalahan Slack menjelaskan pesan yang tidak dapat dihapus', async () => {
+    for (const code of ['cant_delete_message', 'message_not_found']) {
+      const stub = makeStub({ identity: BOT_IDENTITY, usersInfoFails: true });
+      const fetchImpl = async (url, init) => String(url).endsWith('/chat.delete')
+        ? { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ ok: false, error: code }) }
+        : stub.fetchImpl(url, init);
+      const r = await cli(['delete', '--channel', 'C123', '--ts', '123.456', '--as-bot', 'buz', '--yes'], { fetchImpl, tokenReader: botReader([]) });
+      assert.strictEqual(r.code, EXIT.API);
+      assert.match(r.stderr, code === 'cant_delete_message' ? /milik bot/i : /tidak ditemukan/i);
+    }
+  });
+
+  await t('delete: menolak identitas user di slot bot sebelum menulis', async () => {
+    const stub = makeStub();
+    const r = await cli(['delete', '--channel', 'C123', '--ts', '123.456', '--as-bot', 'buz', '--yes'], { fetchImpl: stub.fetchImpl, tokenReader: botReader([]) });
+    assert.strictEqual(r.code, EXIT.IDENTITY);
     assert.strictEqual(stub.writes().length, 0);
   });
 
